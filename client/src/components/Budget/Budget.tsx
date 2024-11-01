@@ -19,6 +19,8 @@ const Budget = () => {
     } catch (err: any) {
       console.log(err.message);
       // You might want to show an error message to the user here
+
+
     }
   };
 
