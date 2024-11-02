@@ -30,6 +30,9 @@ describe("MyBudgetTracker Component", () => {
     expect(screen.getByText("My Budget Planner")).toBeInTheDocument();
   });
 
+
+
+  
   test("Budget Balance Verification", async () => {
     // Mock initial budget and expenses
     (budgetUtils.fetchBudget as jest.Mock).mockResolvedValue(1000);
