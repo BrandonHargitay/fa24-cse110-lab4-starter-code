@@ -18,6 +18,8 @@ const initialState: AppContextType = {
 };
 
 
+
+
 export const AppContext = createContext<AppContextType>(initialState);
 
 export const AppProvider = (props: any) => {
