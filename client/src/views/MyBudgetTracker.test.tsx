@@ -19,6 +19,8 @@ describe("MyBudgetTracker Component", () => {
     (budgetUtils.updateBudget as jest.Mock).mockImplementation((amount) => Promise.resolve(amount));
   });
 
+
+  
   test("renders My Budget Planner title", async () => {
     await act(async () => {
       render(
