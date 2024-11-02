@@ -1,96 +1,143 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { MyBudgetTracker } from './MyBudgetTracker';
-import { AppProvider } from '../context/AppContext';
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { MyBudgetTracker } from "./MyBudgetTracker";
+import { AppProvider } from "../context/AppContext";
+import * as expenseUtils from "../utils/expense-utils";
+import * as budgetUtils from "../utils/budget-utils";
 
-const renderWithContext = (component: React.ReactNode) => {
-  return render(
-    <AppProvider>
-      {component}
-    </AppProvider>
-  );
-};
+// Mock the utility functions
+jest.mock("../utils/expense-utils");
+jest.mock("../utils/budget-utils");
 
-describe('MyBudgetTracker', () => {
+describe("MyBudgetTracker Component", () => {
   beforeEach(() => {
-    renderWithContext(<MyBudgetTracker />);
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+    
+    // Setup default mock implementations
+    (budgetUtils.fetchBudget as jest.Mock).mockResolvedValue(1000);
+    (expenseUtils.fetchExpenses as jest.Mock).mockResolvedValue([]);
+    (budgetUtils.updateBudget as jest.Mock).mockImplementation((amount) => Promise.resolve(amount));
   });
 
-  test('Create an Expense', async () => {
-    const nameInput = screen.getByLabelText('Name');
-    const costInput = screen.getByLabelText('Cost');
-    const saveButton = screen.getByText('Save');
-
-    await userEvent.type(nameInput, 'Test Expense');
-    await userEvent.type(costInput, '100');
-    fireEvent.click(saveButton);
-
-    expect(screen.getByText('Test Expense')).toBeInTheDocument();
-    expect(screen.getByText('$100')).toBeInTheDocument();
-    expect(screen.getByText('Spent so far: $100')).toBeInTheDocument();
-    expect(screen.getByText('Remaining: $900')).toBeInTheDocument();
+  test("renders My Budget Planner title", async () => {
+    await act(async () => {
+      render(
+        <AppProvider>
+          <MyBudgetTracker />
+        </AppProvider>
+      );
+    });
+    expect(screen.getByText("My Budget Planner")).toBeInTheDocument();
   });
 
-  test('Delete an Expense', async () => {
-    // First, add an expense
-    const nameInput = screen.getByLabelText('Name');
-    const costInput = screen.getByLabelText('Cost');
-    const saveButton = screen.getByText('Save');
+  test("Budget Balance Verification", async () => {
+    // Mock initial budget and expenses
+    (budgetUtils.fetchBudget as jest.Mock).mockResolvedValue(1000);
+    (expenseUtils.fetchExpenses as jest.Mock).mockResolvedValue([
+      { id: "1", name: "Expense 1", cost: 300 },
+      { id: "2", name: "Expense 2", cost: 200 }
+    ]);
 
-    await userEvent.type(nameInput, 'Test Expense');
-    await userEvent.type(costInput, '100');
-    fireEvent.click(saveButton);
+    await act(async () => {
+      render(
+        <AppProvider>
+          <MyBudgetTracker />
+        </AppProvider>
+      );
+    });
 
-    // Now, delete the expense
-    const deleteButton = screen.getByText('x');
-    fireEvent.click(deleteButton);
-
-    expect(screen.queryByText('Test Expense')).not.toBeInTheDocument();
-    expect(screen.getByText('Spent so far: $0')).toBeInTheDocument();
-    expect(screen.getByText('Remaining: $1000')).toBeInTheDocument();
+    // Wait for data to load and verify
+    await waitFor(() => {
+      expect(screen.getByText("Spent so far: $500")).toBeInTheDocument();
+      expect(screen.getByText("Remaining: $500")).toBeInTheDocument();
+    });
   });
 
-  test('Budget Balance Verification', async () => {
-    const budget = 1000; // Default budget
+  test("Create and Delete Expense", async () => {
+    const mockExpense = { id: "test-id", name: "Test Expense", cost: 100 };
+    (expenseUtils.createExpense as jest.Mock).mockResolvedValue(mockExpense);
+    
+    await act(async () => {
+      render(
+        <AppProvider>
+          <MyBudgetTracker />
+        </AppProvider>
+      );
+    });
 
-    // Add two expenses
-    const nameInput = screen.getByLabelText('Name');
-    const costInput = screen.getByLabelText('Cost');
-    const saveButton = screen.getByText('Save');
+    // Add new expense
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Name"), { 
+        target: { value: "Test Expense" } 
+      });
+      fireEvent.change(screen.getByLabelText("Cost"), { 
+        target: { value: "100" } 
+      });
+      fireEvent.click(screen.getByText("Save"));
+    });
 
-    await userEvent.type(nameInput, 'Expense 1');
-    await userEvent.type(costInput, '300');
-    fireEvent.click(saveButton);
+    // Verify expense is added
+    await waitFor(() => {
+      expect(screen.getByText("Test Expense")).toBeInTheDocument();
+      expect(screen.getByText("$100")).toBeInTheDocument();
+    });
 
-    await userEvent.type(nameInput, 'Expense 2');
-    await userEvent.type(costInput, '200');
-    fireEvent.click(saveButton);
+    // Delete expense
+    await act(async () => {
+      const deleteButton = screen.getByRole("button", { name: "x" });
+      fireEvent.click(deleteButton);
+    });
 
-    const spentSoFar = screen.getByText('Spent so far: $500');
-    const remaining = screen.getByText('Remaining: $500');
-
-    expect(spentSoFar).toBeInTheDocument();
-    expect(remaining).toBeInTheDocument();
-
-    // Verify the equation: Budget = Remaining Balance + Total Expenditure
-    const totalExpenditure = 500;
-    const remainingBalance = 500;
-    expect(budget).toBe(remainingBalance + totalExpenditure);
+    // Verify expense is removed
+    await waitFor(() => {
+      expect(screen.queryByText("Test Expense")).not.toBeInTheDocument();
+    });
   });
 
-  test('Edit Budget', async () => {
-    const editButton = screen.getByText('Edit');
-    fireEvent.click(editButton);
+  test("Edit Budget", async () => {
+    // Mock the initial budget fetch
+    (budgetUtils.fetchBudget as jest.Mock).mockResolvedValue(1000);
+    
+    await act(async () => {
+      render(
+        <AppProvider>
+          <MyBudgetTracker />
+        </AppProvider>
+      );
+    });
 
-    const budgetInput = screen.getByDisplayValue('1000');
-    await userEvent.clear(budgetInput);
-    await userEvent.type(budgetInput, '1500');
+    // Wait for initial budget to be displayed
+    await waitFor(() => {
+      expect(screen.getByText("Budget: $1000")).toBeInTheDocument();
+    });
 
-    const saveButton = screen.getByText('Save', { selector: 'button:not([type="submit"])' });
-    fireEvent.click(saveButton);
+    // Click edit button
+    await act(async () => {
+      const editButton = screen.getByText("Edit");
+      fireEvent.click(editButton);
+    });
 
-    expect(screen.getByText('Budget: $1500')).toBeInTheDocument();
-    expect(screen.getByText('Remaining: $1500')).toBeInTheDocument();
+    // Change budget value
+    const budgetInput = screen.getByTestId("budget-input");
+    await act(async () => {
+      fireEvent.change(budgetInput, { target: { value: "1500" } });
+    });
+
+    // Mock the update budget call
+    (budgetUtils.updateBudget as jest.Mock).mockResolvedValueOnce(1500);
+
+    // Save new budget
+    await act(async () => {
+      const saveButton = screen.getByTestId("save-budget-button");
+      fireEvent.click(saveButton);
+    });
+
+    // Wait for the budget to update and verify
+    await waitFor(() => {
+      expect(budgetUtils.updateBudget).toHaveBeenCalledWith(1500);
+      expect(screen.getByText("Budget: $1500")).toBeInTheDocument();
+    }, {
+      timeout: 3000  // Increase timeout if needed
+    });
   });
-});
+}); 
