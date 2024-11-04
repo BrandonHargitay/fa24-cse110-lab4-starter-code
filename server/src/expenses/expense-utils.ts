@@ -1,39 +1,52 @@
 import { Expense } from "../types";
 import { Request, Response } from "express";
+import { Database } from "sqlite";
 
-export function createExpenseServer(req: Request, res: Response, expenses: Expense[]) {
+export async function createExpenseServer(req: Request, res: Response, db: Database) {
     const { id, cost, name } = req.body;
 
     if (!name || !id || !cost) {
         return res.status(400).send({ error: "Missing required fields" });
     }
 
-    const newExpense: Expense = {
-        id: id,
-        name,
-        cost,
-    };
+    try {
+        // Insert the new expense into the database
+        await db.run(
+            `INSERT INTO expenses (id, description, cost) VALUES (?, ?, ?)`,
+            [id, name, cost]
+        );
 
-    expenses.push(newExpense);
-    res.status(201).send(newExpense);
+        const newExpense: Expense = { id, name, cost };
+        res.status(201).send(newExpense);
+    } catch (error) {
+        res.status(500).send({ error: "Failed to create expense" });
+    }
 }
 
-export function deleteExpense(req: Request, res: Response, expenses: Expense[]) {
+export async function deleteExpense(req: Request, res: Response, db: Database) {
     const { id } = req.params;
 
-    // Find the index of the expense to delete
-    const expenseIndex = expenses.findIndex(expense => expense.id === id);
+    try {
+        // First check if the expense exists
+        const expense = await db.get(`SELECT * FROM expenses WHERE id = ?`, [id]);
+        
+        if (!expense) {
+            return res.status(404).send({ error: "Expense not found" });
+        }
 
-    if (expenseIndex === -1) {
-        return res.status(404).send({ error: "Expense not found" });
+        // Delete the expense
+        await db.run(`DELETE FROM expenses WHERE id = ?`, [id]);
+        res.status(200).send({ message: "Expense deleted successfully" });
+    } catch (error) {
+        res.status(500).send({ error: "Failed to delete expense" });
     }
-
-    // Remove the expense from the array
-    expenses.splice(expenseIndex, 1);
-    
-    res.status(200).send({ message: "Expense deleted successfully" });
 }
 
-export function getExpenses(req: Request, res: Response, expenses: Expense[]) {
-    res.status(200).send({ "data": expenses });
+export async function getExpenses(req: Request, res: Response, db: Database) {
+    try {
+        const expenses = await db.all(`SELECT id, description as name, cost FROM expenses`);
+        res.status(200).send({ "data": expenses });
+    } catch (error) {
+        res.status(500).send({ error: "Failed to fetch expenses" });
+    }
 }
